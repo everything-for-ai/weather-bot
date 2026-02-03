@@ -1,32 +1,29 @@
 #!/usr/bin/env python3
 """
 Weather Bot - Multi-platform weather notification
-Supports WeChat, Feishu, Telegram, Slack, and more
+Simple version with mock data for testing
 """
 
 import os
 import json
-import requests
+import random
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 
 class WeatherBot:
+    """Simple Weather Bot"""
+    
     def __init__(self, config_file: str = "config.json"):
         self.config = self.load_config(config_file)
-        self.session = requests.Session()
     
     def load_config(self, config_file: str) -> Dict:
-        """Load configuration"""
         default_config = {
             "locations": [
-                {"name": "深圳", "city": "Shenzhen", "country": "CN"},
-                {"name": "北京", "city": "Beijing", "country": "CN"}
-            ],
-            "schedule": "08:00",
-            "weather_api_key": os.environ.get("WEATHER_API_KEY", ""),
-            "platforms": ["feishu"],
-            "openweathermap_appid": os.environ.get("OPENWEATHERMAP_APPID", "")
+                {"name": "深圳", "city": "Shenzhen"},
+                {"name": "北京", "city": "Beijing"},
+                {"name": "上海", "city": "Shanghai"}
+            ]
         }
         
         if os.path.exists(config_file):
@@ -36,105 +33,45 @@ class WeatherBot:
         
         return default_config
     
-    def get_weather(self, city: str, country: str = "CN") -> Dict:
-        """Get weather data from OpenWeatherMap"""
-        api_key = self.config.get("openweathermap_appid", "")
-        
-        if not api_key:
-            # Return mock data if no API key
-            return self.get_mock_weather(city)
-        
-        url = f"http://api.openweathermap.org/data/2.5/weather"
-        params = {
-            "q": f"{city},{country}",
-            "appid": api_key,
-            "units": "metric"
-        }
-        
-        try:
-            response = self.session.get(url, params=params, timeout=10)
-            data = response.json()
-            
-            return {
-                "city": city,
-                "temp": data["main"]["temp"],
-                "feels_like": data["main"]["feels_like"],
-                "humidity": data["main"]["humidity"],
-                "description": data["weather"][0]["description"],
-                "icon": data["weather"][0]["icon"]
-            }
-        except Exception as e:
-            print(f"Weather API error: {e}")
-            return self.get_mock_weather(city)
-    
     def get_mock_weather(self, city: str) -> Dict:
-        """Return mock weather data for testing"""
-        weather_conditions = [
-            {"desc": "Clear", "icon": "☀️"},
-            {"desc": "Clouds", "icon": "☁️"},
-            {"desc": "Partly cloudy", "icon": "⛅"},
-            {"desc": "Rain", "icon": "🌧️"}
-        ]
-        import random
-        condition = random.choice(weather_conditions)
+        """Get mock weather data"""
+        conditions = ["晴朗", "多云", "阴天", "小雨", "晴转多云"]
+        temps = {"Shenzhen": 22, "Beijing": 5, "Shanghai": 15}
         
         return {
             "city": city,
-            "temp": round(random.uniform(-5, 30), 1),
-            "feels_like": round(random.uniform(-5, 30), 1),
-            "humidity": random.randint(30, 80),
-            "description": condition["desc"],
-            "icon": condition["icon"]
+            "temp": temps.get(city, 20) + random.randint(-3, 3),
+            "condition": random.choice(conditions),
+            "humidity": random.randint(30, 70)
         }
     
-    def format_weather_message(self, weather_data: Dict) -> str:
-        """Format weather data as a message"""
-        return f"""
-🌤️ 今日天气 - {weather_data['city']}
-{weather_data['icon']} {weather_data['description']}
-🌡️ {weather_data['temp']}°C (体感 {weather_data['feels_like']}°C)
-💧 湿度: {weather_data['humidity']}%
-        """.strip()
-    
-    def get_all_weather(self) -> str:
+    def get_all_weather(self) -> List[Dict]:
         """Get weather for all configured locations"""
-        messages = [f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M')} 天气报告\n"]
-        
-        for loc in self.config["locations"]:
-            weather = self.get_weather(loc["city"], loc.get("country", "CN"))
-            messages.append(self.format_weather_message(weather))
-            messages.append("")  # Empty line
-        
-        return "\n".join(messages).strip()
+        results = []
+        for loc in self.config.get("locations", []):
+            weather = self.get_mock_weather(loc["city"])
+            weather["display_name"] = loc.get("name", loc["city"])
+            results.append(weather)
+        return results
     
-    def send_to_feishu(self, message: str):
-        """Send message to Feishu"""
-        # TODO: Implement Feishu webhook
-        print(f"[Feishu] {message}")
+    def format_weather_message(self, weather: Dict) -> str:
+        """Format single weather as message"""
+        return f"""🌤️ {weather['display_name']}
+  天气: {weather['condition']}
+  温度: {weather['temp']}°C
+  湿度: {weather['humidity']}%"""
     
-    def send_to_wecom(self, message: str):
-        """Send message to WeCom"""
-        # TODO: Implement WeCom webhook
-        print(f"[WeCom] {message}")
-    
-    def send_to_telegram(self, message: str):
-        """Send message to Telegram"""
-        # TODO: Implement Telegram bot
-        print(f"[Telegram] {message}")
+    def get_all_weather_message(self) -> str:
+        """Get weather for all locations"""
+        lines = [f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M')} 天气报告\n"]
+        for weather in self.get_all_weather():
+            lines.append(self.format_weather_message(weather))
+            lines.append("")
+        return "\n".join(lines).strip()
     
     def run(self):
         """Main execution"""
-        message = self.get_all_weather()
-        
-        # Send to all configured platforms
-        for platform in self.config.get("platforms", []):
-            if platform == "feishu":
-                self.send_to_feishu(message)
-            elif platform == "wecom":
-                self.send_to_wecom(message)
-            elif platform == "telegram":
-                self.send_to_telegram(message)
-        
+        message = self.get_all_weather_message()
         print(message)
         return message
 
